@@ -18,6 +18,6 @@ original androidtv
 https://github.com/JeffLIrion/python-androidtv
 
 fork with fix
-https://github.com/JeffLIrion/python-androidtv
+https://github.com/barmazu/python-androidtv
 
 and the home-assistant team
