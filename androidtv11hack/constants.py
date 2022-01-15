@@ -29,7 +29,7 @@ CMD_AUDIO_STATE = CMD_AUDIO_STATE_RAW + r"echo $CURRENT_AUDIO_STATE | grep pause
 
 
 #: Determine whether the device is awake
-CMD_AWAKE = "dumpsys power | grep mWakefulness | grep -q Awake"
+CMD_AWAKE = "dumpsys power | grep mWakefulness | grep Awake >/dev/null 2>&1"
 
 #: Parse current application identifier from dumpsys output and assign it to ``CURRENT_APP`` variable (assumes dumpsys output is momentarily set to ``CURRENT_APP`` variable)
 ## Android < 10 CMD_PARSE_CURRENT_APP = 'CURRENT_APP=${CURRENT_APP#*ActivityRecord{* * } && CURRENT_APP=${CURRENT_APP#*{* * } && CURRENT_APP=${CURRENT_APP%%/*} && CURRENT_APP=${CURRENT_APP%\\}*}'
@@ -79,7 +79,7 @@ CMD_RUNNING_APPS_FIRETV = "ps | grep u0_a"
 CMD_INSTALLED_APPS = "pm list packages"
 
 #: Determine if the device is on
-CMD_SCREEN_ON = "(dumpsys power | grep 'Display Power' | grep -q 'state=ON' || dumpsys power | grep -q 'mScreenOn=true')"
+CMD_SCREEN_ON = "(dumpsys power | grep 'Display Power' | grep 'state=ON' || dumpsys power | grep 'mScreenOn=true') >/dev/null 2>&1"
 
 #: Get the "STREAM_MUSIC" block from ``dumpsys audio``
 CMD_STREAM_MUSIC = r"dumpsys audio | grep '\- STREAM_MUSIC:' -A 11"
