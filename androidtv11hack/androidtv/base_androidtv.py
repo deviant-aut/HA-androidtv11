@@ -218,6 +218,15 @@ class BaseAndroidTV(BaseTV):  # pylint: disable=too-few-public-methods
                 else:
                     state = constants.STATE_IDLE
 
+            # Kodi
+            elif current_app == constants.APP_KODI:
+                if media_session_state == 2:
+                    state = constants.STATE_PAUSED
+                elif media_session_state == 3:
+                    state = constants.STATE_PLAYING
+                else:
+                    state = constants.STATE_IDLE                    
+                    
             # Get the state from `media_session_state`
             elif media_session_state:
                 if media_session_state == 2:
