@@ -6,11 +6,11 @@ ADB Debugging must be enabled.
 from .androidtv.androidtv_sync import AndroidTVSync
 from .basetv.basetv import state_detection_rules_validator
 from .basetv.basetv_sync import BaseTVSync
-from .constants import DEFAULT_AUTH_TIMEOUT_S
+from .constants import DEFAULT_AUTH_TIMEOUT_S, DEFAULT_TRANSPORT_TIMEOUT_S
 from .firetv.firetv_sync import FireTVSync
 
 
-__version__ = "0.0.60"
+__version__ = "0.0.66"
 
 
 def setup(
@@ -23,6 +23,7 @@ def setup(
     device_class="auto",
     auth_timeout_s=DEFAULT_AUTH_TIMEOUT_S,
     signer=None,
+    transport_timeout_s=DEFAULT_TRANSPORT_TIMEOUT_S,
 ):
     """Connect to a device and determine whether it's an Android TV or an Amazon Fire TV.
 
@@ -46,6 +47,8 @@ def setup(
         Authentication timeout (in seconds)
     signer : PythonRSASigner, None
         The signer for the ADB keys, as loaded by :meth:`androidtv.adb_manager.adb_manager_sync.ADBPythonSync.load_adbkey`
+    transport_timeout_s : float
+        Transport timeout (in seconds)
 
     Returns
     -------
@@ -55,14 +58,14 @@ def setup(
     """
     if device_class == "androidtv":
         atv = AndroidTVSync(host, port, adbkey, adb_server_ip, adb_server_port, state_detection_rules, signer)
-        atv.adb_connect(auth_timeout_s=auth_timeout_s)
+        atv.adb_connect(auth_timeout_s=auth_timeout_s, transport_timeout_s=transport_timeout_s)
         atv.get_device_properties()
         atv.get_installed_apps()
         return atv
 
     if device_class == "firetv":
         ftv = FireTVSync(host, port, adbkey, adb_server_ip, adb_server_port, state_detection_rules, signer)
-        ftv.adb_connect(auth_timeout_s=auth_timeout_s)
+        ftv.adb_connect(auth_timeout_s=auth_timeout_s, transport_timeout_s=transport_timeout_s)
         ftv.get_device_properties()
         ftv.get_installed_apps()
         return ftv
@@ -73,7 +76,7 @@ def setup(
     aftv = BaseTVSync(host, port, adbkey, adb_server_ip, adb_server_port, state_detection_rules, signer)
 
     # establish the ADB connection
-    aftv.adb_connect(auth_timeout_s=auth_timeout_s)
+    aftv.adb_connect(auth_timeout_s=auth_timeout_s, transport_timeout_s=transport_timeout_s)
 
     # get device properties
     aftv.device_properties = aftv.get_device_properties()
@@ -83,16 +86,10 @@ def setup(
 
     # Fire TV
     if aftv.device_properties.get("manufacturer") == "Amazon":
-        aftv.__class__ = FireTVSync
+        return FireTVSync.from_base(aftv)
 
     # Android TV
-    else:
-        aftv.__class__ = AndroidTVSync
-
-    # Fill in commands that are specific to the device
-    aftv._fill_in_commands()  # pylint: disable=protected-access
-
-    return aftv
+    return AndroidTVSync.from_base(aftv)
 
 
 def ha_state_detection_rules_validator(exc):

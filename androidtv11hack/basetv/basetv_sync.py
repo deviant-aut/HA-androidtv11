@@ -157,7 +157,12 @@ class BaseTVSync(BaseTV):
         """
         return self._adb.screencap()
 
-    def adb_connect(self, always_log_errors=True, auth_timeout_s=constants.DEFAULT_AUTH_TIMEOUT_S):
+    def adb_connect(
+        self,
+        always_log_errors=True,
+        auth_timeout_s=constants.DEFAULT_AUTH_TIMEOUT_S,
+        transport_timeout_s=constants.DEFAULT_TRANSPORT_TIMEOUT_S,
+    ):
         """Connect to an Android TV / Fire TV device.
 
         Parameters
@@ -166,6 +171,8 @@ class BaseTVSync(BaseTV):
             If True, errors will always be logged; otherwise, errors will only be logged on the first failed reconnect attempt
         auth_timeout_s : float
             Authentication timeout (in seconds)
+        transport_timeout_s : float
+            Transport timeout (in seconds)
 
         Returns
         -------
@@ -174,7 +181,7 @@ class BaseTVSync(BaseTV):
 
         """
         if isinstance(self._adb, ADBPythonSync):
-            return self._adb.connect(always_log_errors, auth_timeout_s)
+            return self._adb.connect(always_log_errors, auth_timeout_s, transport_timeout_s)
         return self._adb.connect(always_log_errors)
 
     def adb_close(self):
@@ -200,21 +207,15 @@ class BaseTVSync(BaseTV):
             A dictionary with keys ``'wifimac'``, ``'ethmac'``, ``'serialno'``, ``'manufacturer'``, ``'model'``, and ``'sw_version'``
 
         """
-        properties = self._adb.shell(
-            constants.CMD_MANUFACTURER
-            + " && "
-            + constants.CMD_MODEL
-            + " && "
-            + constants.CMD_SERIALNO
-            + " && "
-            + constants.CMD_VERSION
-            + " && "
-            + constants.CMD_MAC_WLAN0
-            + " && "
-            + constants.CMD_MAC_ETH0
-        )
+        properties = self._adb.shell(constants.CMD_DEVICE_PROPERTIES)
 
         self._parse_device_properties(properties)
+
+        ethmac_response = self._adb.shell(constants.CMD_MAC_ETH0)
+        wifimac_response = self._adb.shell(constants.CMD_MAC_WLAN0)
+        self.device_properties["ethmac"] = self._parse_mac_address(ethmac_response)
+        self.device_properties["wifimac"] = self._parse_mac_address(wifimac_response)
+
         return self.device_properties
 
     # ======================================================================= #
@@ -241,10 +242,10 @@ class BaseTVSync(BaseTV):
         Returns
         -------
         str, None
-            The audio state, as determined from the ADB shell command :py:const:`androidtv.constants.CMD_AUDIO_STATE`, or ``None`` if it could not be determined
+            The audio state, or ``None`` if it could not be determined
 
         """
-        audio_state_response = self._adb.shell(constants.CMD_AUDIO_STATE)
+        audio_state_response = self._adb.shell(self._cmd_audio_state())
         return self._audio_state(audio_state_response)
 
     def awake(self):
@@ -267,7 +268,7 @@ class BaseTVSync(BaseTV):
             The ID of the current app, or ``None`` if it could not be determined
 
         """
-        current_app_response = self._adb.shell(self._cmd_current_app)
+        current_app_response = self._adb.shell(self._cmd_current_app())
 
         return self._current_app(current_app_response)
 
@@ -282,7 +283,7 @@ class BaseTVSync(BaseTV):
             The state from the output of the ADB shell command ``dumpsys media_session``, or ``None`` if it could not be determined
 
         """
-        media_session_state_response = self._adb.shell(constants.CMD_MEDIA_SESSION_STATE_FULL)
+        media_session_state_response = self._adb.shell(self._cmd_current_app_media_session_state())
 
         return self._current_app_media_session_state(media_session_state_response)
 
@@ -295,7 +296,8 @@ class BaseTVSync(BaseTV):
             The HDMI input, or ``None`` if it could not be determined
 
         """
-        return self._get_hdmi_input(self._adb.shell(constants.CMD_HDMI_INPUT))
+        hdmi_input_response = self._adb.shell(self._cmd_hdmi_input())
+        return self._get_hdmi_input(hdmi_input_response)
 
     def get_installed_apps(self):
         """Return a list of installed applications.
@@ -336,6 +338,19 @@ class BaseTVSync(BaseTV):
 
         return media_session_state
 
+    def running_apps(self):
+        """Return a list of running user applications.
+
+        Returns
+        -------
+        list
+            A list of the running apps
+
+        """
+        running_apps_response = self._adb.shell(self._cmd_running_apps())
+
+        return self._running_apps(running_apps_response)
+
     def screen_on(self):
         """Check if the screen is on.
 
@@ -363,6 +378,29 @@ class BaseTVSync(BaseTV):
         output = self._adb.shell(constants.CMD_SCREEN_ON_AWAKE_WAKE_LOCK_SIZE)
 
         return self._screen_on_awake_wake_lock_size(output)
+
+    def stream_music_properties(self):
+        """Get various properties from the "STREAM_MUSIC" block from ``dumpsys audio``..
+
+        Returns
+        -------
+        audio_output_device : str, None
+            The current audio playback device, or ``None`` if it could not be determined
+        is_volume_muted : bool, None
+            Whether or not the volume is muted, or ``None`` if it could not be determined
+        volume : int, None
+            The absolute volume level, or ``None`` if it could not be determined
+        volume_level : float, None
+            The volume level (between 0 and 1), or ``None`` if it could not be determined
+
+        """
+        stream_music = self._get_stream_music()
+        audio_output_device = self._audio_output_device(stream_music)
+        volume = self._volume(stream_music, audio_output_device)
+        volume_level = self._volume_level(volume)
+        is_volume_muted = self._is_volume_muted(stream_music)
+
+        return audio_output_device, is_volume_muted, volume, volume_level
 
     def volume(self):
         """Get the absolute volume level.
@@ -474,7 +512,7 @@ class BaseTVSync(BaseTV):
             The ID of the app that will be launched
 
         """
-        self._adb.shell(self._cmd_launch_app.format(app))
+        self._adb.shell(self._cmd_launch_app(app))
 
     def stop_app(self, app):
         """Stop an app.
@@ -591,6 +629,19 @@ class BaseTVSync(BaseTV):
     def media_previous_track(self):
         """Send media previous action (results in rewind)."""
         self._key(constants.KEY_PREVIOUS)
+
+    # ======================================================================= #
+    #                                                                         #
+    #                   "key" methods: turn on/off commands                   #
+    #                                                                         #
+    # ======================================================================= #
+    def turn_on(self):
+        """Turn on the device."""
+        self._adb.shell(self._cmd_turn_on())
+
+    def turn_off(self):
+        """Turn off the device."""
+        self._adb.shell(self._cmd_turn_off())
 
     # ======================================================================= #
     #                                                                         #

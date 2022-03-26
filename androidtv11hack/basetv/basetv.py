@@ -66,6 +66,8 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
 
     """
 
+    DEVICE_ENUM = constants.DeviceEnum.BASETV
+
     def __init__(
         self, adb, host, port=5555, adbkey="", adb_server_ip="", adb_server_port=5037, state_detection_rules=None
     ):
@@ -79,14 +81,6 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
         self.device_properties = {}
         self.installed_apps = []
 
-        # commands that can vary based on the device
-        self._cmd_get_properties_lazy_running_apps = ""
-        self._cmd_get_properties_lazy_no_running_apps = ""
-        self._cmd_get_properties_not_lazy_running_apps = ""
-        self._cmd_get_properties_not_lazy_no_running_apps = ""
-        self._cmd_current_app = ""
-        self._cmd_launch_app = ""
-
         # make sure the rules are valid
         if self._state_detection_rules:
             for app_id, rules in self._state_detection_rules.items():
@@ -97,12 +91,202 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
         # the max volume level (determined when first getting the volume level)
         self.max_volume = None
 
-    def _fill_in_commands(self):
-        """Fill in commands that are specific to the device.
+        # Customizable commands
+        self._custom_commands = {}
 
-        This is implemented in the `BaseAndroidTV` and `BaseFireTV` classes.
+    # ======================================================================= #
+    #                                                                         #
+    #                      Device-specific ADB commands                       #
+    #                                                                         #
+    # ======================================================================= #
+    def customize_command(self, custom_command, value):
+        """Customize a command used to retrieve properties.
+
+        Parameters
+        ----------
+        custom_command : str
+            The name of the command that will be customized; it must be in `constants.CUSTOMIZABLE_COMMANDS`
+        value : str, None
+            The custom ADB command that will be used, or ``None`` if the custom command should be deleted
 
         """
+        if custom_command in constants.CUSTOMIZABLE_COMMANDS:
+            if value is not None:
+                self._custom_commands[custom_command] = value
+            elif custom_command in self._custom_commands:
+                del self._custom_commands[custom_command]
+
+    def _cmd_audio_state(self):
+        """Get the command used to retrieve the current audio state for this device.
+
+        Returns
+        -------
+        str
+            The device-specific ADB shell command used to determine the current audio state
+
+        """
+        if constants.CUSTOM_AUDIO_STATE in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_AUDIO_STATE]
+
+        # Is this an Android 11 device?
+        if self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV and self.device_properties.get("sw_version", "") == "11":
+            return constants.CMD_AUDIO_STATE11
+        return constants.CMD_AUDIO_STATE
+
+    def _cmd_current_app(self):
+        """Get the command used to retrieve the current app for this device.
+
+        Returns
+        -------
+        str
+            The device-specific ADB shell command used to determine the current app
+
+        """
+        if constants.CUSTOM_CURRENT_APP in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_CURRENT_APP]
+
+        # Is this a Google Chromecast Android TV?
+        if (
+            self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV
+            and "Google" in self.device_properties.get("manufacturer", "")
+            and "Chromecast" in self.device_properties.get("model", "")
+        ):
+            return constants.CMD_CURRENT_APP_GOOGLE_TV
+
+        # Is this an Android 11 device?
+        if self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV and self.device_properties.get("sw_version", "") == "11":
+            return constants.CMD_CURRENT_APP11
+
+        return constants.CMD_CURRENT_APP
+
+    def _cmd_current_app_media_session_state(self):
+        """Get the command used to retrieve the current app and media session state for this device.
+
+        Returns
+        -------
+        str
+            The device-specific ADB shell command used to determine the current app and media session state
+
+        """
+        if constants.CUSTOM_CURRENT_APP_MEDIA_SESSION_STATE in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_CURRENT_APP_MEDIA_SESSION_STATE]
+
+        # Is this a Google Chromecast Android TV?
+        if (
+            self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV
+            and "Google" in self.device_properties.get("manufacturer", "")
+            and "Chromecast" in self.device_properties.get("model", "")
+        ):
+            return constants.CMD_CURRENT_APP_MEDIA_SESSION_STATE_GOOGLE_TV
+
+        # Is this an Android 11 device?
+        if self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV and self.device_properties.get("sw_version", "") == "11":
+            return constants.CMD_CURRENT_APP_MEDIA_SESSION_STATE11
+
+        return constants.CMD_CURRENT_APP_MEDIA_SESSION_STATE
+
+    def _cmd_hdmi_input(self):
+        """Get the command used to retrieve the current HDMI input for this device.
+
+        Returns
+        -------
+        str
+            The device-specific ADB shell command used to determine the current HDMI input
+
+        """
+        if constants.CUSTOM_HDMI_INPUT in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_HDMI_INPUT]
+
+        # Is this an Android 11 device?
+        if self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV and self.device_properties.get("sw_version", "") == "11":
+            return constants.CMD_HDMI_INPUT11
+
+        return constants.CMD_HDMI_INPUT
+
+    def _cmd_launch_app(self, app):
+        """Get the command to launch the specified app for this device.
+
+        Parameters
+        ----------
+        app : str
+            The app that will be launched
+
+        Returns
+        -------
+        str
+            The device-specific command to launch the app
+
+        """
+        if constants.CUSTOM_LAUNCH_APP in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_LAUNCH_APP].format(app)
+
+        # Is this a Google Chromecast Android TV?
+        if (
+            self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV
+            and "Google" in self.device_properties.get("manufacturer", "")
+            and "Chromecast" in self.device_properties.get("model", "")
+        ):
+            return constants.CMD_LAUNCH_APP_GOOGLE_TV.format(app)
+
+        if self.DEVICE_ENUM == constants.DeviceEnum.FIRETV:
+            return constants.CMD_LAUNCH_APP_FIRETV.format(app)
+
+        # Is this an Android 11 device?
+        if self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV and self.device_properties.get("sw_version", "") == "11":
+            return constants.CMD_LAUNCH_APP11.format(app)
+
+        return constants.CMD_LAUNCH_APP.format(app)
+
+    def _cmd_running_apps(self):
+        """Get the command used to retrieve the running apps for this device.
+
+        Returns
+        -------
+        str
+            The device-specific ADB shell command used to determine the running apps
+
+        """
+        if constants.CUSTOM_RUNNING_APPS in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_RUNNING_APPS]
+
+        if self.DEVICE_ENUM == constants.DeviceEnum.FIRETV:
+            return constants.CMD_RUNNING_APPS_FIRETV
+
+        return constants.CMD_RUNNING_APPS_ANDROIDTV
+
+    def _cmd_turn_off(self):
+        """Get the command used to turn off this device.
+
+        Returns
+        -------
+        str
+            The device-specific ADB shell command used to turn off the device
+
+        """
+        if constants.CUSTOM_TURN_OFF in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_TURN_OFF]
+
+        if self.DEVICE_ENUM == constants.DeviceEnum.FIRETV:
+            return constants.CMD_TURN_OFF_FIRETV
+
+        return constants.CMD_TURN_OFF_ANDROIDTV
+
+    def _cmd_turn_on(self):
+        """Get the command used to turn on this device.
+
+        Returns
+        -------
+        str
+            The device-specific ADB shell command used to turn on the device
+
+        """
+        if constants.CUSTOM_TURN_ON in self._custom_commands:
+            return self._custom_commands[constants.CUSTOM_TURN_ON]
+
+        if self.DEVICE_ENUM == constants.DeviceEnum.FIRETV:
+            return constants.CMD_TURN_ON_FIRETV
+
+        return constants.CMD_TURN_ON_ANDROIDTV
 
     # ======================================================================= #
     #                                                                         #
@@ -152,7 +336,7 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
             The output of the ADB command that retrieves the device properties
 
         This method fills in the ``device_properties`` attribute, which is a dictionary with keys
-        ``'wifimac'``, ``'ethmac'``, ``'serialno'``, ``'manufacturer'``, ``'model'``, and ``'sw_version'``
+        ``'serialno'``, ``'manufacturer'``, ``'model'``, and ``'sw_version'``
 
         """
         _LOGGER.debug("%s:%d `get_device_properties` response: %s", self.host, self.port, properties)
@@ -162,38 +346,46 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
             return
 
         lines = properties.strip().splitlines()
-        if len(lines) != 6:
+        if len(lines) != 4:
             self.device_properties = {}
             return
 
-        manufacturer, model, serialno, version, mac_wlan0_output, mac_eth0_output = lines
+        manufacturer, model, serialno, version = lines
 
         if not serialno.strip():
             _LOGGER.warning("Could not obtain serialno for %s:%d, got: '%s'", self.host, self.port, serialno)
             serialno = None
-
-        mac_wlan0_matches = re.findall(constants.MAC_REGEX_PATTERN, mac_wlan0_output)
-        if mac_wlan0_matches:
-            wifimac = mac_wlan0_matches[0]
-        else:
-            wifimac = None
-
-        mac_eth0_matches = re.findall(constants.MAC_REGEX_PATTERN, mac_eth0_output)
-        if mac_eth0_matches:
-            ethmac = mac_eth0_matches[0]
-        else:
-            ethmac = None
 
         self.device_properties = {
             "manufacturer": manufacturer,
             "model": model,
             "serialno": serialno,
             "sw_version": version,
-            "wifimac": wifimac,
-            "ethmac": ethmac,
         }
 
-        self._fill_in_commands()
+    @staticmethod
+    def _parse_mac_address(mac_response):
+        """Parse a MAC address from the ADB shell response.
+
+        Parameters
+        ----------
+        mac_response : str, None
+            The response from the MAC address ADB shell command
+
+        Returns
+        -------
+        str, None
+            The parsed MAC address, or ``None`` if it could not be determined
+
+        """
+        if not mac_response:
+            return None
+
+        mac_matches = re.findall(constants.MAC_REGEX_PATTERN, mac_response)
+        if mac_matches:
+            return mac_matches[0]
+
+        return None
 
     # ======================================================================= #
     #                                                                         #
@@ -326,12 +518,12 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
 
     @staticmethod
     def _audio_state(audio_state_response):
-        """Parse the :meth:`audio_state` property from the output of the command :py:const:`androidtv.constants.CMD_AUDIO_STATE`.
+        """Parse the :meth:`audio_state` property from the ADB shell output.
 
         Parameters
         ----------
         audio_state_response : str, None
-            The output of the command :py:const:`androidtv.constants.CMD_AUDIO_STATE`
+            The output from the ADB command `androidtv.basetv.basetv.BaseTV._cmd_audio_state``
 
         Returns
         -------
@@ -349,12 +541,12 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
 
     @staticmethod
     def _current_app(current_app_response):
-        """Get the current app from the output of the command :py:const:`androidtv.constants.CMD_CURRENT_APP`.
+        """Get the current app from the output of the command `androidtv.basetv.basetv.BaseTV._cmd_current_app`.
 
         Parameters
         ----------
         current_app_response : str, None
-            The output from the ADB command :py:const:`androidtv.constants.CMD_CURRENT_APP`
+            The output from the ADB command `androidtv.basetv.basetv.BaseTV._cmd_current_app`
 
         Returns
         -------
@@ -367,13 +559,13 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
 
         return current_app_response
 
-    def _current_app_media_session_state(self, media_session_state_response):
-        """Get the current app and the media session state properties from the output of :py:const:`androidtv.constants.CMD_MEDIA_SESSION_STATE_FULL`.
+    def _current_app_media_session_state(self, current_app_media_session_state_response):
+        """Get the current app and the media session state properties from the output of `androidtv.basetv.basetv.BaseTV._cmd_current_app_media_session_state`.
 
         Parameters
         ----------
-        media_session_state_response : str, None
-            The output of :py:const:`androidtv.constants.CMD_MEDIA_SESSION_STATE_FULL`
+        current_app_media_session_state_response : str, None
+            The output of `androidtv.basetv.basetv.BaseTV._cmd_current_app_media_session_state`
 
         Returns
         -------
@@ -383,28 +575,28 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
             The state from the output of the ADB shell command, or ``None`` if it could not be determined
 
         """
-        if not media_session_state_response:
+        if not current_app_media_session_state_response:
             return None, None
 
-        lines = media_session_state_response.splitlines()
+        lines = current_app_media_session_state_response.splitlines()
 
         current_app = self._current_app(lines[0].strip())
 
         if len(lines) > 1:
-            media_session_state = self._media_session_state(lines[1], current_app)
-        else:
-            media_session_state = None
+            matches = constants.REGEX_MEDIA_SESSION_STATE.search(current_app_media_session_state_response)
+            if matches:
+                return current_app, int(matches.group("state"))
 
-        return current_app, media_session_state
+        return current_app, None
 
     @staticmethod
     def _get_hdmi_input(hdmi_response):
-        """Get the HDMI input from the output of :py:const:`androidtv.constants.CMD_HDMI_INPUT`.
+        """Get the HDMI input from the from the ADB shell output`.
 
         Parameters
         ----------
         hdmi_response : str, None
-            The output of :py:const:`androidtv.constants.CMD_HDMI_INPUT`
+            The output from the ADB command `androidtv.basetv.basetv.BaseTV._cmd_hdmi_input``
 
         Returns
         -------
@@ -461,32 +653,6 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
         return None
 
     @staticmethod
-    def _media_session_state(media_session_state_response, current_app):
-        """Get the state from the output of :py:const:`androidtv.constants.CMD_MEDIA_SESSION_STATE`.
-
-        Parameters
-        ----------
-        media_session_state_response : str, None
-            The output of :py:const:`androidtv.constants.CMD_MEDIA_SESSION_STATE`
-        current_app : str, None
-            The current app, or ``None`` if it could not be determined
-
-        Returns
-        -------
-        int, None
-            The state from the output of the ADB shell command, or ``None`` if it could not be determined
-
-        """
-        if not media_session_state_response or not current_app:
-            return None
-
-        matches = constants.REGEX_MEDIA_SESSION_STATE.search(media_session_state_response)
-        if matches:
-            return int(matches.group("state"))
-
-        return None
-
-    @staticmethod
     def _parse_stream_music(stream_music_raw):
         """Parse the output of the command :py:const:`androidtv.constants.CMD_STREAM_MUSIC`.
 
@@ -526,8 +692,6 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
 
         """
         if running_apps_response:
-            if isinstance(running_apps_response, list):
-                return [line.strip().rsplit(" ", 1)[-1] for line in running_apps_response if line.strip()]
             return [line.strip().rsplit(" ", 1)[-1] for line in running_apps_response.splitlines() if line.strip()]
 
         return None
@@ -543,24 +707,25 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
 
         Returns
         -------
-        bool
-            Whether or not the device is on
-        bool
-            Whether or not the device is awake (screensaver is not running)
+        bool, None
+            Whether or not the device is on, or ``None`` if it could not be determined
+        bool, None
+            Whether or not the device is awake (screensaver is not running), or ``None`` if it could not be determined
         int, None
             The size of the current wake lock, or ``None`` if it could not be determined
 
         """
-        if not output:
+        if output is None:
+            return None, None, None
+
+        if output == "":
             return False, False, None
 
-        if output == "1":
-            return True, False, None
+        screen_on = output[0] == "1"
+        awake = None if len(output) < 2 else output[1] == "1"
+        wake_lock_size = None if len(output) < 3 else BaseTV._wake_lock_size(output[2:])
 
-        if output == "11":
-            return True, True, None
-
-        return True, True, BaseTV._wake_lock_size(output[2:])
+        return screen_on, awake, wake_lock_size
 
     def _volume(self, stream_music, audio_output_device):
         """Get the absolute volume level from the ``STREAM_MUSIC`` block from ``adb shell dumpsys audio``.
@@ -585,8 +750,6 @@ class BaseTV(object):  # pylint: disable=too-few-public-methods
             max_volume_matches = re.findall(constants.MAX_VOLUME_REGEX_PATTERN, stream_music, re.DOTALL | re.MULTILINE)
             if max_volume_matches:
                 self.max_volume = float(max_volume_matches[0])
-            else:
-                self.max_volume = 15.0
 
         if not audio_output_device:
             return None
