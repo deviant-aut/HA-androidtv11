@@ -37,7 +37,7 @@ CMD_PARSE_CURRENT_APP = '{ CURRENT_APP=${CURRENT_APP%%/*}; CURRENT_APP=${CURRENT
 
 #: Assign focused application identifier to ``CURRENT_APP`` variable
 ## Android < 10 CMD_DEFINE_CURRENT_APP_VARIABLE = "CURRENT_APP=$(dumpsys window windows | grep -E 'mCurrentFocus|mFocusedApp') && " + CMD_PARSE_CURRENT_APP
-CMD_DEFINE_CURRENT_APP_VARIABLE = "CURRENT_APP=$(dumpsys window windows | grep -E 'mInputMethodTarget in display# 0|mCurrentFocus=' | grep -o Window{.*}) && " + CMD_PARSE_CURRENT_APP
+CMD_DEFINE_CURRENT_APP_VARIABLE = "CURRENT_APP=$(dumpsys window windows | grep -E -m 1 'mInputMethod(Input)?Target in display# 0|mCurrentFocus=' | grep -o Window{.*}) && " + CMD_PARSE_CURRENT_APP
 
 #: Output identifier for current/focused application
 CMD_CURRENT_APP = CMD_DEFINE_CURRENT_APP_VARIABLE + ' && echo $CURRENT_APP'
