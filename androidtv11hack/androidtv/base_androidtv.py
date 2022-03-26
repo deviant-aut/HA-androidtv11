@@ -150,7 +150,11 @@ class BaseAndroidTV(BaseTV):  # pylint: disable=too-few-public-methods
                     state = constants.STATE_IDLE
 
             # NLZIET
-            elif current_app == constants.APP_NLZIET:
+            elif (
+                self.DEVICE_ENUM == constants.DeviceEnum.ANDROIDTV
+                and self.device_properties.get("sw_version", "") == "11"
+                and current_app == constants.APP_NLZIET
+            ):
                 if wake_lock_size == 1:
                     state = constants.STATE_PAUSED
                 elif wake_lock_size == 2:
